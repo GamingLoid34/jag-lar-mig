@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 from PyPDF2 import PdfReader
 from pptx import Presentation
-from gtts import gTTS  # <-- Vi använder den stabila Google-rösten
+from gtts import gTTS
 import tempfile
 import os
 
@@ -16,6 +16,8 @@ if "current_subject" not in st.session_state:
     st.session_state.current_subject = "Allmänt"
 
 # --- FUNKTIONER ---
+
+# (Övriga funktioner för extrahera text, gTTS, etc., är oförändrade)
 
 def extract_text_from_pdf(pdf_file):
     text = ""
@@ -33,13 +35,9 @@ def extract_text_from_pptx(pptx_file):
                 text += shape.text + "\n"
     return text
 
-# Den stabila ljudfunktionen (gTTS)
 def generate_speech_simple(text):
     try:
-        # Skapar ljud på svenska
         tts = gTTS(text=text, lang='sv')
-
-        # Spara till en tillfällig fil
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
             tts.save(fp.name)
             return fp.name
@@ -48,34 +46,69 @@ def generate_speech_simple(text):
         return None
 
 def get_gemini_response(prompt, context, api_key):
-    if not api_key: return "⚠️ Ingen API-nyckel inlagd."
-
-    genai.configure(api_key=api_key)
+    # Ny check: Är nyckeln tom? Då stoppar vi innan Google ens nås.
+    if not api_key: return "⚠️ Fel: API-nyckel saknas. Lägg in nyckeln i Secrets!"
+    
+    # Koden som felar:
+    genai.configure(api_key=api_key) 
+    
     system_instruction = (
-        "Du är en smart och pedagogisk studiecoach i appen 'Jag Lär Mig'. "
-        "Din uppgift är att hjälpa användaren att förstå sitt studiematerial. "
+        "Du är en smart och pedagogisk studiecoach i appen 'Jag Lär Mig'."
+        "Din uppgift är att hjälpa användaren att förstå sitt studiematerial."
         "Var tydlig, uppmuntrande och svara alltid på svenska."
     )
     model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_instruction)
-
+    
     full_prompt = f"Studiematerial:\n{context}\n\nUppgift/Fråga: {prompt}"
-    return model.generate_content(full_prompt).text
+    
+    try:
+        return model.generate_content(full_prompt).text
+    except Exception as e:
+        # Fånga den specifika "invalid key" felet här
+        if "API key not valid" in str(e):
+             st.error("❌ Google avvisar nyckeln! Kolla att den ligger i Secrets och är rätt.")
+        elif "NotFound" in str(e):
+             st.error("❌ Hittar inte modellen. Kolla att nyckeln är aktiv.")
+        return "Ett fel uppstod vid AI-anropet."
+
 
 # --- SIDOPANEL (MENY) ---
+
+# --- NY HANTERING AV API-NYCKELN ---
 with st.sidebar:
     st.title("📖 Jag Lär Mig")
-
-    api_key = st.text_input("Nyckel (API Key)", type="password")
+    
+    # Försök hämta nyckeln från Secrets
+    if "GEMINI_API_KEY" in st.secrets:
+        # Om nyckeln finns i secrets, använd den.
+        api_key = st.secrets["GEMINI_API_KEY"]
+        st.success("🔑 Nyckel laddad från Secrets!")
+    else:
+        # Annars, visa instruktioner
+        st.warning("⚠️ NYCKEL SAKNAS. Se nedan hur du lägger in den.")
+        api_key = "" # Håll nyckeln tom
+        
+        st.info("""
+        **För att fixa felet permanent:**
+        1. Gå till Streamlit Cloud dashboard.
+        2. Klicka på **Secrets**.
+        3. Lägg till nyckeln under namnet **GEMINI_API_KEY**.
+        4. Starta om appen.
+        """)
 
     st.divider()
 
+    # --- RESTEN AV SIDAN (som tidigare) ---
     st.subheader("📂 Mina Ämnen")
+    # ... resten av koden är densamma ...
     subject_list = list(st.session_state.subjects.keys())
-
-    selected_sub = st.selectbox("Välj ämne:", subject_list, index=subject_list.index(st.session_state.current_subject))
+    
+    # Välj ämne
+    selected_sub = st.selectbox("Välj ämne att plugga:", subject_list, index=subject_list.index(st.session_state.current_subject))
     st.session_state.current_subject = selected_sub
-
-    new_sub = st.text_input("Nytt ämne:")
+    
+    # Skapa nytt ämne
+    new_sub = st.text_input("Lägg till nytt ämne (t.ex. Kemi):")
     if st.button("Skapa mapp") and new_sub:
         st.session_state.subjects[new_sub] = ""
         st.session_state.current_subject = new_sub
@@ -83,10 +116,11 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-
+    
+    # Uppladdning
     st.subheader(f"📥 Ladda upp till: {st.session_state.current_subject}")
-    uploaded_files = st.file_uploader("Filer (PDF, PPTX)", accept_multiple_files=True)
-
+    uploaded_files = st.file_uploader("Släpp filer här (PDF, PPTX)", accept_multiple_files=True)
+    
     if st.button("Spara materialet"):
         text_data = st.session_state.subjects[st.session_state.current_subject]
         count = 0
@@ -97,9 +131,9 @@ with st.sidebar:
             elif file.name.endswith(".pptx"):
                 text_data += f"\n--- {file.name} ---\n" + extract_text_from_pptx(file)
                 count += 1
-
+        
         st.session_state.subjects[st.session_state.current_subject] = text_data
-        st.success(f"Sparade {count} filer!")
+        st.success(f"Sparade {count} filer i {st.session_state.current_subject}!")
 
 # --- HUVUDVY ---
 st.header(f"Studerar: {st.session_state.current_subject}")
@@ -107,58 +141,64 @@ st.header(f"Studerar: {st.session_state.current_subject}")
 current_material = st.session_state.subjects[st.session_state.current_subject]
 
 if not current_material:
-    st.info("👈 Börja med att ladda upp material i menyn!")
+    st.info("👈 Den här mappen är tom. Börja med att ladda upp material i menyn!")
 else:
-    tab1, tab2, tab3 = st.tabs(["📝 Material", "🎧 Lyssna", "💬 Förhör"])
+    # --- FLIKAR ---
+    tab1, tab2, tab3 = st.tabs(["📝 Material & Struktur", "🎧 Lyssna", "💬 Förhör & Chatt"])
 
     # FLIK 1: REDIGERA
     with tab1:
         st.subheader("Ditt material")
+        st.caption("Här kan du se texten som appen läst in och ändra om något blev fel.")
+        
+        # Redigeringsfönster
         edited_text = st.text_area("Innehåll", current_material, height=300)
-
-        if st.button("Spara ändringar"):
+        
+        if st.button("Spara ändringar i texten"):
             st.session_state.subjects[st.session_state.current_subject] = edited_text
             st.success("Uppdaterat!")
             st.rerun()
 
-        if st.button("✨ Dela upp i kapitel (AI)"):
-            with st.spinner("Analyserar..."):
+        st.divider()
+        if st.button("✨ Dela upp texten i kapitel (AI)"):
+            with st.spinner("Analyserar struktur..."):
                 chapters = get_gemini_response(
                     "Dela upp texten i tydliga kapitel med rubriker.", 
                     edited_text, api_key
                 )
                 st.markdown(chapters)
 
-    # FLIK 2: LYSSNA (NU MED gTTS)
+    # FLIK 2: LYSSNA
     with tab2:
         st.subheader("Uppläsning")
-
+        
         text_to_read = st.text_area("Text att läsa upp:", value=edited_text[:3000], height=150)
 
         if st.button("▶️ Spela upp"):
             with st.spinner("Skapar ljud..."):
-                # Här använder vi den enkla, säkra funktionen
                 audio_path = generate_speech_simple(text_to_read)
                 if audio_path:
                     st.audio(audio_path, format="audio/mp3")
 
-    # FLIK 3: CHATT
+    # FLIK 3: CHATT / FÖRHÖR
     with tab3:
         st.subheader("Plugga med AI")
-
-        c1, c2 = st.columns(2)
-        if c1.button("Skapa prov"):
+        
+        # Förslag på knappar
+        c1, c2, c3 = st.columns(3)
+        if c1.button("Skapa ett prov"):
             with st.spinner("Skapar prov..."):
                 test = get_gemini_response("Skapa ett prov med 5 frågor + facit.", edited_text, api_key)
                 st.markdown(test)
-
-        if c2.button("Sammanfatta"):
+        
+        if c2.button("Sammanfatta allt"):
             with st.spinner("Sammanfattar..."):
-                summary = get_gemini_response("Sammanfatta det viktigaste.", edited_text, api_key)
+                summary = get_gemini_response("Sammanfatta det viktigaste i punktform.", edited_text, api_key)
                 st.markdown(summary)
 
+        # Chatt
         st.divider()
-        user_q = st.chat_input("Ställ en fråga...")
+        user_q = st.chat_input("Ställ en fråga om materialet...")
         if user_q:
             st.chat_message("user").write(user_q)
             with st.spinner("Tänker..."):
