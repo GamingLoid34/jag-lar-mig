@@ -57,7 +57,7 @@ def get_gemini_response(prompt, context, api_key):
         "Din uppgift är att hjälpa användaren att förstå sitt studiematerial."
         "Var tydlig, uppmuntrande och svara alltid på svenska."
     )
-    model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_instruction)
+    model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=system_instruction)
     
     full_prompt = f"Studiematerial:\n{context}\n\nUppgift/Fråga: {prompt}"
     
