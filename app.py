@@ -49,6 +49,7 @@ def get_gemini_response(prompt, context, api_key):
     if not api_key:
         return "⚠️ Fel: API-nyckel saknas. Lägg in nyckeln i Secrets!"
     
+    # Konfigurera API-nyckeln
     genai.configure(api_key=api_key) 
     
     system_instruction = (
@@ -56,6 +57,8 @@ def get_gemini_response(prompt, context, api_key):
         "Din uppgift är att hjälpa användaren att förstå sitt studiematerial. "
         "Var tydlig, uppmuntrande och svara alltid på svenska."
     )
+    
+    # Byt modellnamn till en som fungerar
     model = genai.GenerativeModel('gemini-1.5-pro', system_instruction=system_instruction)
     
     full_prompt = f"Studiematerial:\n{context}\n\nUppgift/Fråga: {prompt}"
@@ -69,15 +72,18 @@ def get_gemini_response(prompt, context, api_key):
         if "API key not valid" in error_msg:
             st.error("❌ Google avvisar nyckeln! Kontrollera att den är korrekt i Secrets.")
         elif "NotFound" in error_msg:
-            st.error("❌ Modellen hittades inte. Kontrollera att du använder rätt modellnamn.")
+            st.error("❌ Modellen hittades inte. Testa att byta till 'gemini-1.5-pro' eller 'gemini-1.5-flash'.")
         elif "quota" in error_msg.lower():
             st.error("⚠️ Du har nått din kvot hos Google AI. Vänta eller uppgradera din plan.")
         elif "timeout" in error_msg.lower():
             st.error("⏳ Anropet tog för lång tid. Testa igen senare.")
+        elif "404" in error_msg and "models" in error_msg:
+            st.error("❌ Modellen stöds inte i denna API-version. Byt till 'gemini-1.5-pro' eller 'gemini-1.5-flash'.")
         else:
             st.error(f"🚨 Oväntat fel: {error_msg}")
         
         return f"Ett fel uppstod vid AI-anropet.\n\nDetaljer: {error_msg}"
+
 
 
 
