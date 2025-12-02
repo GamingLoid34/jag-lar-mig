@@ -46,15 +46,14 @@ def generate_speech_simple(text):
         return None
 
 def get_gemini_response(prompt, context, api_key):
-    # Ny check: Är nyckeln tom? Då stoppar vi innan Google ens nås.
-    if not api_key: return "⚠️ Fel: API-nyckel saknas. Lägg in nyckeln i Secrets!"
+    if not api_key:
+        return "⚠️ Fel: API-nyckel saknas. Lägg in nyckeln i Secrets!"
     
-    # Koden som felar:
     genai.configure(api_key=api_key) 
     
     system_instruction = (
-        "Du är en smart och pedagogisk studiecoach i appen 'Jag Lär Mig'."
-        "Din uppgift är att hjälpa användaren att förstå sitt studiematerial."
+        "Du är en smart och pedagogisk studiecoach i appen 'Jag Lär Mig'. "
+        "Din uppgift är att hjälpa användaren att förstå sitt studiematerial. "
         "Var tydlig, uppmuntrande och svara alltid på svenska."
     )
     model = genai.GenerativeModel('gemini-pro', system_instruction=system_instruction)
@@ -64,12 +63,22 @@ def get_gemini_response(prompt, context, api_key):
     try:
         return model.generate_content(full_prompt).text
     except Exception as e:
-        # Fånga den specifika "invalid key" felet här
-        if "API key not valid" in str(e):
-             st.error("❌ Google avvisar nyckeln! Kolla att den ligger i Secrets och är rätt.")
-        elif "NotFound" in str(e):
-             st.error("❌ Hittar inte modellen. Kolla att nyckeln är aktiv.")
-        return "Ett fel uppstod vid AI-anropet."
+        error_msg = str(e)
+        
+        # Mer detaljerad felhantering
+        if "API key not valid" in error_msg:
+            st.error("❌ Google avvisar nyckeln! Kontrollera att den är korrekt i Secrets.")
+        elif "NotFound" in error_msg:
+            st.error("❌ Modellen hittades inte. Kontrollera att du använder rätt modellnamn.")
+        elif "quota" in error_msg.lower():
+            st.error("⚠️ Du har nått din kvot hos Google AI. Vänta eller uppgradera din plan.")
+        elif "timeout" in error_msg.lower():
+            st.error("⏳ Anropet tog för lång tid. Testa igen senare.")
+        else:
+            st.error(f"🚨 Oväntat fel: {error_msg}")
+        
+        return f"Ett fel uppstod vid AI-anropet.\n\nDetaljer: {error_msg}"
+
 
 
 # --- SIDOPANEL (MENY) ---
