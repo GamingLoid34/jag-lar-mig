@@ -59,7 +59,8 @@ def get_gemini_response(prompt, context, api_key):
     )
     
     # Byt modellnamn till en som fungerar
-    model = genai.GenerativeModel('gemini-1.5-pro', system_instruction=system_instruction)
+    model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_instruction)
+
     
     full_prompt = f"Studiematerial:\n{context}\n\nUppgift/Fråga: {prompt}"
     
