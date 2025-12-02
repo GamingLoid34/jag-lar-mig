@@ -3,4 +3,3 @@ google-generativeai>=0.7.0
 pypdf2
 python-pptx
 gTTS
-Uppdatera google-generativeai till ny version
